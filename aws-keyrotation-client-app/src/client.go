@@ -3,11 +3,14 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"regexp"
 )
+
+var version = "Keyrotate Client v0.1.0b"
 
 func main() {
 	profile := flag.String("profile", "default", "Name of the AWS Profile, for which Credentials should be rotated")
@@ -16,7 +19,15 @@ func main() {
 	credFilePathDefault := home + "/.aws/credentials"
 
 	credFilePath := flag.String("credential-file", credFilePathDefault, "Path to your AWS Credentials File")
+
+	showVersion := flag.Bool("version", false, "Show Keyrotate Client Version")
+
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	rotateCredentials(*credFilePath, *profile)
 }
