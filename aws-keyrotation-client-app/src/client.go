@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/user"
 	"regexp"
 	"strings"
+
+	"github.com/aws/aws-sdk-go/aws/credentials"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -51,17 +54,42 @@ func retriveHomeDir() string {
 }
 
 func rotateCredentials(path string, profile string, region *string) {
-	profileSectionStart := findProfileSection(path, profile)
-	log.Println(profileSectionStart)
+	session, err := session.NewSessionWithOptions(session.Options{
+		Profile: profile,
+		Config: aws.Config{
+			Region: region,
+		},
+	})
 
-	// input, err := ioutil.ReadFile(path)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
+	log.Println("Searching for specified profile")
 
-	// lines := strings.Split(string(input), "\n")
+	sectionIndex := findProfileSection(path, profile)
 
-	obtainCredentials(profile, region)
+	log.Println("Obtaining new credentials for profile")
+	credential, err := obtainCredentials(path, profile, session)
+
+	if err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	log.Println("Writing new credentials to file")
+	err = writeCredentialsFile(credential, path, sectionIndex)
+
+	if err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	log.Println("Deleting old credentials in AWS")
+	err = deleteOldCredentials(credential, session)
+
+	if err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	log.Println("Rotated credentials successfully")
 }
 
 func findProfileSection(path string, profile string) int {
@@ -85,7 +113,6 @@ func findProfileSection(path string, profile string) int {
 		lineText := fileScanner.Text()
 
 		if matcher.Match([]byte(lineText)) {
-			log.Printf("Profile Section found in line %d\n", lineNumber)
 			break
 		}
 
@@ -95,20 +122,9 @@ func findProfileSection(path string, profile string) int {
 	return lineNumber
 }
 
-func obtainCredentials(profile string, region *string) (map[string]string, error) {
-	session, err := session.NewSessionWithOptions(session.Options{
-		Profile: profile,
-		Config: aws.Config{
-			Region: region,
-		},
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	iamClient := iam.New(session)
-	stsClient := sts.New(session)
+func obtainCredentials(path string, profile string, ses *session.Session) (map[string]string, error) {
+	iamClient := iam.New(ses)
+	stsClient := sts.New(ses)
 
 	stsCallerIdentityResponse, err := stsClient.GetCallerIdentity(&sts.GetCallerIdentityInput{})
 
@@ -126,12 +142,59 @@ func obtainCredentials(profile string, region *string) (map[string]string, error
 		return nil, err
 	}
 
-	accessKey := map[string]string{
-		"AccessKeyId":     *iamCreateAccessKeyResponse.AccessKey.AccessKeyId,
-		"SecretAccessKey": *iamCreateAccessKeyResponse.AccessKey.SecretAccessKey,
+	cred := credentials.NewSharedCredentials(path, profile)
+	credValue, err := cred.Get()
+
+	if err != nil {
+		return nil, err
 	}
 
-	return accessKey, nil
+	credential := map[string]string{
+		"AccessKeyId":     *iamCreateAccessKeyResponse.AccessKey.AccessKeyId,
+		"SecretAccessKey": *iamCreateAccessKeyResponse.AccessKey.SecretAccessKey,
+		"UserName":        userName,
+		"OldAccessKeyId":  credValue.AccessKeyID,
+	}
+
+	return credential, nil
+}
+
+func writeCredentialsFile(credential map[string]string, path string, sectionIndex int) error {
+	input, err := ioutil.ReadFile(path)
+
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(input), "\n")
+
+	lines[sectionIndex] = "aws_access_key_id = " + credential["AccessKeyId"]
+	lines[sectionIndex+1] = "aws_secret_access_key = " + credential["SecretAccessKey"]
+
+	output := strings.Join(lines, "\n")
+
+	err = ioutil.WriteFile(path, []byte(output), 0600)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func deleteOldCredentials(credential map[string]string, ses *session.Session) error {
+	iamClient := iam.New(ses)
+
+	_, err := iamClient.DeleteAccessKey(&iam.DeleteAccessKeyInput{
+		AccessKeyId: aws.String(credential["OldAccessKeyId"]),
+		UserName:    aws.String(credential["UserName"]),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func getUserName(userArn string) string {
