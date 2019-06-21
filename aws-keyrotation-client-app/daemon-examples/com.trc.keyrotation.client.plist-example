@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.trc.keyrotation.client</string>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/aws-keyrotate</string>
+    <!-- Profile to rotate credentials for -->
+    <!-- Defaults to default -->
+    <string>--profile</string> 
+    <string>profile</string> 
+    <!-- Region to use for AWS API -->
+    <!-- Defaults to eu-central-1 -->
+    <string>--region</string>
+    <string>aws-region</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>8</integer>
+  </dict>
+  <key>StandardErrorPath</key>
+  <string>/dev/null</string>
+  <key>StandardOutPath</key>
+  <string>/tmp/output-keyrotate</string>
+</dict>
+</plist>
