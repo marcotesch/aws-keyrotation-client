@@ -26,8 +26,8 @@
     <integer>8</integer>
   </dict>
   <key>StandardErrorPath</key>
-  <string>/dev/null</string>
-  <key>StandardOutPath</key>
   <string>/tmp/output-keyrotate</string>
+  <key>StandardOutPath</key>
+  <string>/dev/null</string>
 </dict>
 </plist>
