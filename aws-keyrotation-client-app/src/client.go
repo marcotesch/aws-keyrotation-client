@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -128,11 +129,16 @@ func obtainCredentials(path string, profile string, ses *session.Session) (map[s
 
 	stsCallerIdentityResponse, err := stsClient.GetCallerIdentity(&sts.GetCallerIdentityInput{})
 
-	userName := getUserName(*stsCallerIdentityResponse.Arn)
-
 	if err != nil {
+		if awsErr, ok := err.(awserr.Error); ok {
+			// Detailed error handling
+			log.Fatal(awsErr.Error())
+		}
+		// Not an AWS SDK Error
 		return nil, err
 	}
+
+	userName := getUserName(*stsCallerIdentityResponse.Arn)
 
 	iamCreateAccessKeyResponse, err := iamClient.CreateAccessKey(&iam.CreateAccessKeyInput{
 		UserName: aws.String(userName),
